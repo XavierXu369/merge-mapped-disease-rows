@@ -1,0 +1,4 @@
+interface:
+  display_name: "Merge Mapped Disease Rows"
+  short_description: "Merge validated same-disease Excel mapping rows"
+  default_prompt: "Use $merge-mapped-disease-rows to validate my mapped Excel, preview two-layer merge candidates, and generate a static merged workbook."
