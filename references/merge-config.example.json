@@ -1,0 +1,52 @@
+{
+  "input": {
+    "workbook": "C:\\path\\post-mapping-pool.xlsx",
+    "source_sheet": "更新版拆分底稿",
+    "mapping_result_sheet": "Mapping结果",
+    "header_row": 1
+  },
+  "fields": {
+    "source_key": "序号",
+    "mapping_id": "Mapping ID",
+    "entity": "药品",
+    "indication": "适应症拆分结果",
+    "source_disease": "对应疾病",
+    "generic": "通用名",
+    "dosage_form": "剂型",
+    "brand": "商品名"
+  },
+  "merge": {
+    "delimiter": "；",
+    "layer1_allowed_varying_fields": [],
+    "layer2_identity_fields": [
+      "药品",
+      "通用名",
+      "剂型",
+      "商品名",
+      "适应症拆分结果",
+      "对应疾病"
+    ],
+    "layer2_allowed_difference_fields": [
+      "持证商",
+      "持证商(英文)",
+      "批准文号",
+      "历史批准文号",
+      "生产企业",
+      "规格",
+      "包装规格",
+      "最新批准日期"
+    ]
+  },
+  "formula_policy": {
+    "allow_external_formulas": false
+  },
+  "output": {
+    "final_sheet": "合并版拆分底稿"
+  },
+  "workflow": {
+    "input_approved": false,
+    "merge_keys_approved": false,
+    "second_layer_decisions_closed": false,
+    "final_execution_approved": false
+  }
+}

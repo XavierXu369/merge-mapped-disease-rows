@@ -1,4 +1,4 @@
 interface:
-  display_name: "Merge Mapped Disease Rows"
-  short_description: "Merge validated same-disease Excel mapping rows"
-  default_prompt: "Use $merge-mapped-disease-rows to validate my mapped Excel, preview two-layer merge candidates, and generate a static merged workbook."
+  display_name: "合并已映射疾病行"
+  short_description: "校验 Mapping 后底稿，逐组批准并生成两层静态合并结果"
+  default_prompt: "Use $merge-mapped-disease-rows to validate my finalized Mapping workbook, preview two-layer candidates, close every cross-source decision, and generate a static merged sheet."

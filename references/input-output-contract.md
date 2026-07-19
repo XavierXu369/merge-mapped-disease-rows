@@ -1,29 +1,42 @@
-# Input and Output Contract
+# Merge Mapped Disease Rows V2 — Input and Output Contract
 
-## Purpose and boundary
+## Contents
 
-Use this Skill only after the Mapping Skill has finalized one workbook containing a complete post-split source sheet and the fixed `Mapping结果` sheet. It changes the **record granularity** of the final research pool; it does not re-split indications, re-map diseases, change any Mapping status, or add a new medical judgment.
+1. Boundary
+2. Run inputs
+3. Mapping contract
+4. Layer 1 contract
+5. Layer 2 contract
+6. Candidate decisions and fingerprint
+7. Preview contract
+8. Generate contract
+9. Output preservation
+10. Quality control and stops
 
-The desired business unit is normally `product or generic name × Disease CN`. Different Disease CN values remain separate research units.
+## 1. Boundary
 
-## Required workbook structure
+Run this Skill on one complete source pool after indication splitting, Mapping finalization, and Mapping-ID backfill. It changes only record granularity. It must not split indications again, revise medical Mapping, consolidate listed and clinical pools, derive Full/Clean views, or calculate downstream module markers.
 
-### Complete source sheet
+The usual downstream research unit is close to `business asset × dosage form × Disease`, but every run must freeze its own Layer 2 identity fields. Field counts, row counts, candidate counts, and TA-specific decisions are never permanent constants.
 
-The source sheet contains all business fields plus:
+## 2. Run inputs
 
-| Logical field | Role |
+### 2.1 Complete source sheet
+
+The source sheet contains every original business field plus:
+
+| Logical field | Requirement |
 |---|---|
-| Source key | Identifies the record before indication splitting; it may repeat after splitting. |
-| `Mapping ID` | Unique technical ID for each split row. |
-| Entity | Default product or business entity. |
-| Split indication | One indication per source row. |
-| `对应疾病` | Mapping backfill used for cross-sheet validation and final grouping. |
-| Generic name, dosage form, brand name | Core identity fields for cross-registration consolidation. |
+| Source key | Nonblank lineage ID for the record before indication splitting. It may repeat after splitting. |
+| `Mapping ID` | Nonblank, unique technical ID for every split row. |
+| Entity | Nonblank product or business entity used for identity validation. |
+| Split indication | One split indication per Mapping row. |
+| `对应疾病` | Backfilled Disease for Mapped rows only. |
+| Generic name, dosage form, brand name | Required Layer 2 identity inputs; values may be blank only when the business field legitimately has no value. |
 
-The source sheet does **not** need `Mapping Status` or `Rationale`. All remaining fields are preservation fields.
+The configured header row and effective data rows are determined by nonblank Mapping IDs, not by formatting-only `UsedRange` rows.
 
-### Fixed Mapping-result sheet
+### 2.2 Fixed Mapping-result sheet
 
 `Mapping结果` contains exactly these 10 columns in order:
 
@@ -40,73 +53,139 @@ Mapping Status
 Rationale
 ```
 
-`Mapping ID` is the sole join key. Both sheets must have the same nonblank unique ID set in the same order. Never join by Excel row number, source key, product name, or indication text.
+`Mapping ID` is the only join key. The source and Mapping sheets must have identical nonblank unique IDs in identical order.
 
-For each joined row:
+## 3. Mapping contract
 
-- `Mapped` requires nonblank `Disease CN` and source `对应疾病 = Disease CN`;
-- every other status requires blank `Disease CN` and blank source `对应疾病`;
-- `Rationale` is always nonblank.
+Allowed statuses are exactly:
 
-## Eligibility and merge keys
+| Status | Disease CN and source backfill | Merge eligibility |
+|---|---|---|
+| `Mapped` | Both nonblank and equal | Eligible |
+| `Manual Review Required - No TA Match` | Both blank | Never merge |
+| `Manual Review Required - Multiple Candidates` | Both blank | Never merge |
+| `Unmapped - Other TA` | Both blank | Never merge |
+| `Unmapped - Invalid Information` | Both blank | Never merge |
 
-Only rows whose joined `Mapping Status = Mapped` and whose joined `Disease CN` is nonblank may enter either merge layer.
+Every Mapping row requires a nonblank Rationale. This Skill preserves all Mapping values and formatting, including the red No TA Match Rationale rule. It does not convert deprecated status wording or make a new medical decision.
 
-### Layer 1 — merge mapped indications within a source record
+## 4. Layer 1 contract
 
-```text
-Source key + Entity + Disease CN
-```
-
-Keep the first source row as the anchor. Join source keys when necessary, `Mapping ID`, and split indications in original order with `；`; retain anchor-row values for other identical fields. Mapping rationales remain auditable by the retained IDs on the unchanged `Mapping结果` sheet.
-
-### Layer 2 — consolidate equivalent cross-registration records
-
-Run only after Layer 1. The core identity key is:
+Layer 1 reconstructs split indications that belong to the same original source record and now resolve to the same Disease.
 
 ```text
-Entity + Generic name + Dosage form + Brand name (including blankness)
-+ merged split indication + Disease CN + Mapping Status
+Layer 1 key = Source key + Disease CN
 ```
 
-Use it only when different registrations represent the same downstream research object and differ solely in registration/history information such as holder, manufacturer, specification, approval number, packaging, or approval date.
+Do not include Entity in the key. Entity is a validation field: if one source lineage key contains conflicting Entity values, the conflict must be visible rather than silently split into separate groups.
 
-Join multiple source keys, Mapping IDs, and divergent registration/history values with `；` in original order. If a core identity field differs, preserve separate rows and request a business decision.
+For a multirow Layer 1 group:
 
-## Validation and confirmation gate
+- join `Mapping ID` and split indication in source order with the configured delimiter;
+- retain Source key and Disease once;
+- require all other source fields to have one normalized value unless the header appears in `layer1_allowed_varying_fields`;
+- join explicitly approved split-varying fields in source order;
+- stop before generation when any other field differs.
 
-Before generation, validate read-only:
+Layer 1 is structural and may be executed without a per-group business decision only after all consistency checks pass.
 
-1. Both sheets, header names, and complete field structures are readable.
-2. `Mapping结果` uses the exact fixed 10-column schema.
-3. Mapping IDs are unique, nonblank, and identical across sheets in set and order.
-4. Every Mapping row has an allowed status and nonblank rationale.
-5. Disease and source backfill obey the status-specific rules.
-6. Candidate Layer 1 groups have consistent core static fields.
-7. Candidate Layer 2 groups agree on the full core identity key; distinct rationale wording is shown for review but remains on `Mapping结果`.
-8. Formula cells and possible external dependencies are reported for both sheets. They may remain on copied audit sheets, never on the final merged sheet.
+## 5. Layer 2 contract
 
-Show all candidate groups and expected row counts. Do not generate until the user explicitly confirms the keys, cross-registration candidates, delimiter, treatment of non-Mapped rows, and output name.
+Layer 2 compares different Layer 1 source records. Its identity fields are run configuration, but must include at least:
 
-## Output and quality requirements
+- Entity;
+- generic name;
+- dosage form;
+- brand name, with blank and nonblank treated as different;
+- merged split indication;
+- Disease.
 
-Create a new workbook, never overwrite the input. Preserve every original sheet, including the complete source sheet and `Mapping结果`, unchanged. Add one final merged full-field sheet that:
+Additional fields such as ingredient combination, route, release form, salt form, target, or other asset-defining fields may be added for a run. Source key and Mapping ID may not be identity fields.
 
-- uses exactly the source-sheet columns and order;
-- contains static displayed values only;
-- keeps every non-Mapped row unchanged and in original relative order;
-- retains the Mapping IDs required to trace every merged row back to `Mapping结果`.
+Every candidate reports all differing source columns. The following differences are automatically aggregatable:
 
-Before handoff, verify:
+- Source key;
+- `Mapping ID`.
 
-- copied source and Mapping-result formulas equal the input sheets;
-- output columns equal source columns;
-- output rows equal input rows minus Layer 1 and Layer 2 reductions;
-- Mapped output rows equal Mapped input rows minus both reductions;
-- every non-Mapped status count is unchanged;
-- merged IDs, indications, and registration differences retain original order and use `；`;
-- the final merged sheet contains zero formulas.
+Any other difference must be named in `layer2_allowed_difference_fields`, which should contain only approved registration/history fields such as holder, manufacturer, specification, approval number, packaging, or approval date. A `MERGE` decision cannot override a prohibited difference.
 
-## Stop instead of merging
+Different Disease values never share a candidate. Non-Mapped records never enter Layer 2.
 
-Stop when either sheet is missing or incomplete; the Mapping-result schema changes; Mapping ID is blank, duplicated, missing from either sheet, or ordered differently; source backfill disagrees with Mapping results; a Mapped row lacks Disease CN; a non-Mapped row contains Disease CN; a first-layer group has a core-field conflict; a second-layer candidate differs in generic name, dosage form, indication, disease, status, or brand positioning; or formulas return invalid values.
+## 6. Candidate decisions and fingerprint
+
+Preview creates:
+
+- a SHA-256 input fingerprint;
+- a contract hash that excludes mutable workflow approval flags;
+- stable Layer 1 and Layer 2 group IDs;
+- a run fingerprint covering the input, contract, groups, and differences.
+
+When Layer 2 candidates exist, the decision file must contain the exact run fingerprint and exactly one entry per candidate:
+
+- `MERGE`: consolidate the candidate;
+- `KEEP SEPARATE`: retain each child record separately.
+
+Each decision requires a substantive rationale. Unknown, duplicated, missing, or pending candidates block generation. A changed workbook, field contract, allowed difference list, or candidate set produces a different fingerprint and invalidates the old decision file.
+
+## 7. Preview contract
+
+Preview is read-only and returns at least:
+
+- source and Mapping sheet dimensions and effective rows;
+- input SHA-256 and contract hash;
+- exact five-state counts;
+- Mapping-ID set/order and backfill validation;
+- source and Mapping formula counts, formula-error counts, and external-formula counts;
+- Layer 1 groups, joined IDs/indications, differing fields, blockers, and reduction;
+- Layer 2 candidate IDs, child source keys, Mapping IDs, identity values, differing fields and values, prohibited differences, merge eligibility, and potential reduction;
+- final-sheet name availability;
+- run fingerprint and readiness.
+
+Preview may be rerun without changing any workbook.
+
+## 8. Generate contract
+
+Generate requires:
+
+- `workflow.input_approved = true`;
+- `workflow.merge_keys_approved = true`;
+- `workflow.second_layer_decisions_closed = true`;
+- `workflow.final_execution_approved = true`;
+- CLI `-Confirmed`;
+- a matching, complete decision file when Layer 2 candidates exist.
+
+Apply every valid Layer 1 merge. Apply only Layer 2 candidates decided `MERGE`; retain every `KEEP SEPARATE` child. Sort output records by their earliest source row.
+
+## 9. Output preservation
+
+Create a new workbook with the same extension as the input. Preserve every original worksheet; do not delete or replace a pre-existing final-sheet name.
+
+The new final sheet must:
+
+- use exactly the source headers and order;
+- contain static evaluated values and zero formulas;
+- retain source value types where practical instead of coercing the entire matrix to text;
+- copy anchor-row formats and number formats;
+- join only approved aggregate fields with the configured delimiter;
+- preserve the Mapping IDs needed to trace each merged record to the unchanged `Mapping结果` sheet.
+
+The input file must remain byte-identical. Reopen the output and verify original sheet names plus value/formula fingerprints for all preserved sheets.
+
+## 10. Quality control and stops
+
+Stop when:
+
+- a required workbook, sheet, header, or effective row is missing;
+- the fixed Mapping schema or five-state vocabulary is violated;
+- Mapping IDs are blank, duplicated, missing, or differently ordered;
+- source backfill and Mapping Disease disagree;
+- Rationale is blank or Disease rules are violated;
+- mapped source lineage key, Entity, or split indication is blank;
+- Layer 1 contains an unapproved varying field;
+- a Layer 2 candidate is unclosed or a `MERGE` contains a prohibited difference;
+- the decision fingerprint differs;
+- formulas contain error values or external formulas are present without explicit approval;
+- the final sheet already exists;
+- the output exists, overwrites the input, or changes extension;
+- an original worksheet changes;
+- the final row arithmetic, status counts, merged IDs, or zero-formula check fails.

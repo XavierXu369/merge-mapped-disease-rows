@@ -1,0 +1,15 @@
+{
+  "run_fingerprint": "<copy-exactly-from-preview>",
+  "layer2_decisions": [
+    {
+      "candidate_id": "L2-<candidate-id-from-preview>",
+      "decision": "MERGE",
+      "rationale": "The records have the same approved business identity and differ only in the approved registration/history fields."
+    },
+    {
+      "candidate_id": "L2-<candidate-id-from-preview>",
+      "decision": "KEEP SEPARATE",
+      "rationale": "The records represent distinct downstream research assets and must remain separate."
+    }
+  ]
+}
